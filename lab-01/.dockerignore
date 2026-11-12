@@ -1,0 +1,12 @@
+.git
+.env
+.venv/
+data/
+__pycache__/
+*.pyc
+*.dump
+.DS_Store
+compose.yaml
+init-db/
+partner/
+*.md
