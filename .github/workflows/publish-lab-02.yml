@@ -1,0 +1,94 @@
+name: publish-lab-02
+
+on:
+  push:
+    branches: [main, lab-02]
+    paths:
+      - "lab-02/**"
+      - "!lab-02/published.txt"
+      - "!lab-02/**.md"
+      - ".github/workflows/publish-lab-02.yml"
+  pull_request:
+    paths:
+      - "lab-02/**"
+      - ".github/workflows/publish-lab-02.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-lab-02-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: lab-02
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: lab-02/requirements*.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest -q --durations=5
+
+  image:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/catshop" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: lab-02
+          load: true
+          tags: catshop:ci
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the built image
+        run: |
+          docker run -d --name smoke -p 8080:8080 catshop:ci
+          for i in $(seq 1 30); do curl -fsS localhost:8080/health && break; sleep 1; done
+          curl -fsS localhost:8080/visits
+          docker rm -f smoke
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        id: publish
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: lab-02
+          push: true
+          tags: ${{ steps.name.outputs.image }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+
+      - name: Digest
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ steps.name.outputs.image }}@${{ steps.publish.outputs.digest }}"
+          echo "${{ steps.name.outputs.image }}@${{ steps.publish.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
