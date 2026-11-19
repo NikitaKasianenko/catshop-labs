@@ -11,5 +11,6 @@ Two caches in `publish-lab-02.yml`:
 | `pip install` in the test job | 5 s | 3 s |
 | setup-python (restores the pip cache) | 5 s | 3 s |
 
-The `docker build` got faster: with the gha layer cache, `pip install` inside the image and the venv copy were
-`CACHED` instead of re-run, and only the layers after the changed workflow inputs were rebuilt.
+The `docker build` got faster: on the warm run every step — `useradd`, `python -m venv`, `COPY requirements.txt`,
+`pip install` — came back `CACHED` from the gha layer cache, so the 48 s cold build was mostly the base-image pull
+and the in-image `pip install`, and the warm one only had to export layers.
