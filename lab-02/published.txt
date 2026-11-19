@@ -1,0 +1,1 @@
+ghcr.io/nikitakasianenko/catshop@sha256:b95eb81effebc7a40c83ade017f6ea7b01af254ab9348fa4a068db53af6e78eb
